@@ -19,7 +19,7 @@ setup(
     package_data={"helmsdeep": ["*.json"]},
     zip_safe=False,
     license="MIT",
-    python_requires=">=3.12",
+    python_requires=">=3.11",
     install_requires=[
         "locust>=2.38.1",
     ],

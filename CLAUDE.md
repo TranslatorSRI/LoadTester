@@ -361,21 +361,21 @@ they contain assets worth recovering for the roadmap below. Retrieve with
 ## How to run
 
 ```bash
-pip install -e .          # Python >= 3.12; installs locust
+pip install -e .          # Python >= 3.11; installs locust
 
 # One layer per run (kps | aras | ars); --host required.
 helmsdeep --targets kps --host https://your-retriever.example.org --csv-prefix run1
 helmsdeep --targets aras --host https://your-ara.example.org --csv-prefix run1
-helmsdeep --targets ars  --host https://ars.ci.transltr.io/ars/api --csv-prefix run1
+helmsdeep --targets ars  --host https://ars.ci.transltr.io --csv-prefix run1
 
 # Pathfinder is its own (heavier) run type, ARA/ARS only:
 helmsdeep --targets aras_pathfinder --host https://your-ara.example.org --csv-prefix pf1
-helmsdeep --targets ars_pathfinder  --host https://ars.ci.transltr.io/ars/api --csv-prefix pf1
+helmsdeep --targets ars_pathfinder  --host https://ars.ci.transltr.io --csv-prefix pf1
 
 # Mixed capacity profile (ARA/ARS only): 2/3 inferred MVP1+MVP2 + 1/3 Pathfinder,
 # ramped to 30 -> 45 -> 60 concurrent and judged pass/fail per checkpoint.
 helmsdeep --targets aras_mixed --host https://your-ara.example.org --csv-prefix mix1
-helmsdeep --targets ars_mixed  --host https://ars.ci.transltr.io/ars/api --csv-prefix mix1
+helmsdeep --targets ars_mixed  --host https://ars.ci.transltr.io --csv-prefix mix1
 ```
 
 - The `LoadTestShape` (`StepLoad`) **drives users, spawn rate, and duration**, so
@@ -519,6 +519,10 @@ helmsdeep --targets ars_mixed  --host https://ars.ci.transltr.io/ars/api --csv-p
 - **Environments & TRAPI versions vary per service.** Endpoints live across
   `*.ci.transltr.io`, `*.test.transltr.io`, and prod, and individual services pin
   different TRAPI versions in their URL paths. Target deliberately.
+- **Stay on 3.11 syntax.** `setup.py` pins `python_requires=">=3.11"`, not 3.12,
+  because the [Translator TestHarness](https://github.com/TranslatorSRI/TestHarness)
+  installs HelmsDeep as its performance runner and runs on a 3.11 base image. No
+  3.12-only syntax anywhere in the package.
 - **Swap the CURIEs.** The KP corpus uses a few real MONDO/CHEBI entities and the
   inferred corpus draws diseases from `curie_list.json`; replace/extend them with
   entities the target service actually knows about, or queries return empty and

@@ -22,8 +22,13 @@ and the asynchronous **ARS**.
 ## Install
 
 ```bash
-pip install -e .          # Python >= 3.12; installs locust
+pip install -e .          # Python >= 3.11; installs locust
 ```
+
+3.11 rather than 3.12 because HelmsDeep is also installed as a dependency of the
+[Translator TestHarness](https://github.com/TranslatorSRI/TestHarness), which
+runs on a 3.11 base image and drives this CLI as its performance runner. Nothing
+here uses 3.12-only syntax; keep it that way.
 
 ## Run a workflow
 
@@ -38,9 +43,10 @@ helmsdeep --targets aras \
     --host https://your-ara-service.example.org \
     --csv-prefix run1
 
-# ARS — async submit/poll/merge of inferred queries (host = the ARS API base)
+# ARS — async submit/poll/merge of inferred queries (host = the service root;
+# the /ars/api/... paths come from the target config, don't put them in --host)
 helmsdeep --targets ars \
-    --host https://ars.ci.transltr.io/ars/api \
+    --host https://ars.ci.transltr.io \
     --csv-prefix run1
 
 # Pathfinder — its own heavier run type (ARA/ARS only); pins two endpoints and
@@ -49,7 +55,7 @@ helmsdeep --targets aras_pathfinder \
     --host https://your-ara-service.example.org \
     --csv-prefix pf1
 helmsdeep --targets ars_pathfinder \
-    --host https://ars.ci.transltr.io/ars/api \
+    --host https://ars.ci.transltr.io \
     --csv-prefix pf1
 
 # Mixed capacity profile (ARA/ARS only) — 2/3 inferred MVP1+MVP2, 1/3 Pathfinder
@@ -59,7 +65,7 @@ helmsdeep --targets aras_mixed \
     --host https://your-ara-service.example.org \
     --csv-prefix mix1
 helmsdeep --targets ars_mixed \
-    --host https://ars.ci.transltr.io/ars/api \
+    --host https://ars.ci.transltr.io \
     --csv-prefix mix1
 ```
 
@@ -67,9 +73,12 @@ helmsdeep --targets ars_mixed \
   Pathfinder run types `aras_pathfinder` / `ars_pathfinder` (ARA/ARS only), or the
   mixed capacity profile `aras_mixed` / `ars_mixed` (ARA/ARS only — see
   ["Mixed capacity profile"](#mixed-capacity-profile-aras_mixed--ars_mixed)).
-- `--host` is **required** — the base URL of the target service. For `kps`/`aras`
-  the `/query` path is appended; for `ars` the host is the API base and the tool
-  uses `/submit` then `/messages/{pk}`.
+- `--host` is **required** — the **service root**, with no path of its own. Each
+  target's `endpoint` (and, for async targets, `messages_endpoint`) is appended
+  to it: `kps`/`aras` append `/query`, and `ars` appends `/ars/api/submit` then
+  `/ars/api/messages/{pk}`. So the ARS host is `https://ars.ci.transltr.io`, not
+  `https://ars.ci.transltr.io/ars/api` — including the API path there sends every
+  request to `/ars/api/ars/api/...`.
 - `--csv-prefix` is optional; it falls back to the `LOCUST_CSV_PREFIX` env var,
   then to `trapi_run`.
 - `--time-budget` / `--quick` compress a run to fit a wall clock — see
@@ -166,7 +175,7 @@ a rough read — compress it:
 
 ```bash
 # Smoke run: the whole ramp in about 10 minutes.
-helmsdeep --targets ars_mixed --host https://ars.ci.transltr.io/ars/api --quick
+helmsdeep --targets ars_mixed --host https://ars.ci.transltr.io --quick
 
 # Or name your own budget: 30m, 1h, 90s, or plain seconds.
 helmsdeep --targets aras_mixed --host https://your-ara.example.org --time-budget 30m
