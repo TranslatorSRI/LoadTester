@@ -208,7 +208,17 @@ Package `helmsdeep/`:
     returns 0 users in the gap and calls `COLLECTOR.end_active_stage()` to freeze
     the just-finished stage's end time); an `@events.init` listener sets
     `stop_timeout = REQUEST_TIMEOUT` so a slow in-flight query finishes rather than
-    being killed when users ramp to 0.
+    being killed when users ramp to 0. The gap's spawn rate is the just-finished
+    stage's **user count**, so Locust's dispatcher stops every user in one
+    iteration: it removes `floor(spawn_rate)` users per iteration and blocks on
+    each batch's `stop_timeout`, so a smaller rate walks the teardown down a few
+    users a second while everyone not yet stopped keeps starting *new* queries.
+    `_draining()` + the gate at the top of `TRAPIUser.query` close the remaining
+    seam (Locust polls `tick()` only about once a second, and acts on it
+    asynchronously): a user whose query returns inside the gap parks on
+    `gevent.sleep(DRAIN_RECHECK_S)` instead of issuing another one. It reads the
+    shape's own clock (`StepLoad.in_cooldown()`, via the module-level `SHAPE`),
+    not the last tick, so the boundary is exact.
   - `StageCollector` / `COLLECTOR` — buckets every completed request into the
     stage active when it *finished* (per-stage, per-`qtype`). Also holds the two
     per-query ARS lists (`queries`, `completions`) and hands out the shared
@@ -404,6 +414,12 @@ helmsdeep --targets ars_mixed  --host https://ars.ci.transltr.io/ars/api --csv-p
   stages ramps users to 0; the just-finished stage's end time is frozen so its
   `duration_s`/RPS reflect the active window, and a slow query still running
   drains into *that* stage (via `stop_timeout`), keeping the next stage clean.
+  A drain is **only** in-flight queries finishing — **no new query starts once
+  the gap begins**. Locust won't give you that for free: its teardown is
+  rate-limited and its shape poll is ~1 s coarse, so the gap both stops every
+  user in a single dispatch iteration (spawn rate = the stage's user count) and
+  gates `TRAPIUser.query` on `_draining()`. Without the gate the frozen stage
+  keeps collecting requests it never launched under load, inflating its RPS.
 - **Closed-loop load.** `TRAPIUser.wait_time = constant(0)` — no think time; users
   hammer the endpoint as fast as responses return.
 - **A compressed run is not a measurement.** `--time-budget`/`--quick` scale
