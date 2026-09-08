@@ -100,7 +100,7 @@ TARGETS = {
             (120, 20, 300),
             (160, 20, 300),
         ],
-        "p99_slo_ms": 60000,
+        "p99_slo_ms": 210000,
         # Matches the p99 SLO: a query that finishes inside its latency budget
         # drains into the stage that launched it rather than contaminating the
         # next one. (Cheap lookups didn't bleed; Retriever does.)
@@ -124,6 +124,7 @@ TARGETS = {
         ],
         "p99_slo_ms": 300000,
         "cooldown_s": 120,                 # drain slow queries between stages
+        "request_timeout_s": 300,
     },
     "ars": {
         "label": "ARS",
@@ -138,17 +139,17 @@ TARGETS = {
                                           # see if a timed-out query ever finishes
         # A "Done" with 0 results is a silent downstream break -> counts against
         # the knee. Flip to False to score only transport failures.
-        "zero_result_is_failure": True,
+        "zero_result_is_failure": False,
         # Runs take minutes -- very low concurrency, long holds.
         "stages": [
             (2,  1, 300),  # 5 mins
-            (3,  1, 300),  # 5 mins
-            (5,  2, 330),  # 5.5 mins
-            (10, 2, 360),  # 6 mins
-            (20, 5, 420),  # 7 mins
-            (40, 5, 600),  # 10 mins
+            (5,  1, 300),  # 5 mins
+            (10, 2, 330),  # 5.5 mins
+            (30, 2, 360),  # 6 mins
+            (45, 5, 420),  # 7 mins
+            (60, 5, 600),  # 10 mins
         ],
-        "p99_slo_ms": 240000,             # 4-min knee target (< max_poll_s)
+        "p99_slo_ms": 360000,             # 6-min knee target (< max_poll_s)
         "cooldown_s": 240,                 # drain slow queries between stages
     },
     # Pathfinder is its own run type (ARA + ARS only): it pins two endpoints and

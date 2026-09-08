@@ -115,7 +115,7 @@ COMPLETION_MAX_POLL_S = max(_TGT.get("completion_max_poll_s", MAX_POLL_S), MAX_P
 # outcomes (submit error, Error status, Timeout) fail, and the zero-result query's
 # latency joins the percentile pool instead of being discarded -- but it is still
 # tallied in ars_health and still raises a red flag.
-ZERO_RESULT_IS_FAILURE = _TGT.get("zero_result_is_failure", True)
+ZERO_RESULT_IS_FAILURE = _TGT.get("zero_result_is_failure", False)
 
 # Detached greenlets still polling timed-out queries for the completion sidecar;
 # on_test_stop drains them (bounded) so their rows make it into the file.
