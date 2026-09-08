@@ -456,6 +456,16 @@ class TRAPIUser(HttpUser):
 
     @task
     def query(self):
+        # A cooldown is a DRAIN, not a quiet stage: the users still alive are
+        # only waiting to be stopped, so none of them may start new work. Locust
+        # cannot enforce that on its own -- it polls the shape about once a
+        # second and its stop lands asynchronously after that -- so without this
+        # gate a user whose query returns inside the gap immediately fires off
+        # another one, which lands in the drain (inflating the RPS of the stage
+        # whose window was already frozen) or bleeds into the next stage.
+        if _draining():
+            gevent.sleep(DRAIN_RECHECK_S)
+            return
         qtype, builder = random.choice(_FLAT)
         payload = builder()
         token = COLLECTOR.begin_inflight(qtype)
@@ -810,6 +820,20 @@ def _set_stop_timeout(environment, **_kw):
 # Step-load shape. tick() returns (user_count, spawn_rate) or None to stop.
 # It also tells the collector which stage is active.
 # ----------------------------------------------------------------------------
+SHAPE = None            # the live StepLoad instance, set in StepLoad.__init__
+DRAIN_RECHECK_S = 0.2   # how often a parked user re-asks whether the drain is over
+
+
+def _draining():
+    """True while the ramp sits in a cooldown gap, i.e. no user may start a query.
+
+    Read off the shape's own clock rather than off its last tick: Locust polls
+    tick() about once a second and acts on it asynchronously, so a user asking
+    "may I start another query?" needs a finer answer than the tick can give.
+    """
+    return bool(COOLDOWN_S) and SHAPE is not None and SHAPE.in_cooldown()
+
+
 class StepLoad(LoadTestShape):
     def __init__(self):
         super().__init__()
@@ -817,7 +841,22 @@ class StepLoad(LoadTestShape):
         # and the stage being reported can never disagree.
         windows, self._total = config.build_timeline(STAGES, COOLDOWN_S)
         self._bounds = [w for w in windows if w[2] is not None]
-        self._cooldowns = [(s, e) for s, e, idx in windows if idx is None]
+        # Each cooldown carries the stage it follows, so the drain can be told to
+        # stop exactly the users that stage was running (see tick()).
+        self._cooldowns = []
+        prev_idx = 0
+        for start, end, idx in windows:
+            if idx is None:
+                self._cooldowns.append((start, end, prev_idx))
+            else:
+                prev_idx = idx
+        global SHAPE
+        SHAPE = self   # the user path asks us whether it is inside a drain
+
+    def in_cooldown(self):
+        """Is the run, right now, inside a cooldown gap?"""
+        run_time = self.get_run_time()
+        return any(start <= run_time < end for start, end, _ in self._cooldowns)
 
     def tick(self):
         run_time = self.get_run_time()
@@ -831,10 +870,20 @@ class StepLoad(LoadTestShape):
         # In a cooldown gap: ramp users to 0 so slow in-flight queries drain into
         # the just-finished stage (its end time is frozen here) rather than the
         # next one. stop_timeout (set at init) lets those queries finish.
-        for start, end in self._cooldowns:
+        #
+        # The spawn rate here is the just-finished stage's user count, because
+        # Locust's dispatcher removes floor(spawn_rate) users per iteration and
+        # blocks on each batch's stop_timeout: at a lower rate the teardown walks
+        # down a few users a second (or slower), and every user not yet told to
+        # stop keeps launching NEW queries the whole way down -- the opposite of
+        # a drain. One rate, one iteration, every user stopped at once; each then
+        # finishes only the query already in its hands. Held constant through the
+        # gap (not read off the live user count) so the tick value doesn't change
+        # under Locust and restart the teardown mid-drain.
+        for start, end, prev_idx in self._cooldowns:
             if start <= run_time < end:
                 COLLECTOR.end_active_stage()
-                return (0, max(1, len(STAGES)))
+                return (0, max(1, STAGES[prev_idx][0]))
         return None
 
 
